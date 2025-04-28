@@ -30,10 +30,10 @@ const Dashboard: React.FC = () => {
 
   // Count connections by type
   const connCounts = {
-    [ConnectionType.PostgreSQL]: connections.filter(c => c.type === ConnectionType.PostgreSQL).length,
-    [ConnectionType.MySQL]: connections.filter(c => c.type === ConnectionType.MySQL).length,
-    [ConnectionType.Oracle]: connections.filter(c => c.type === ConnectionType.Oracle).length,
-    [ConnectionType.SQLServer]: connections.filter(c => c.type === ConnectionType.SQLServer).length,
+    [ConnectionType.PostgreSQL]: connections.filter(c => c.databaseType === ConnectionType.PostgreSQL).length,
+    [ConnectionType.MySQL]: connections.filter(c => c.databaseType === ConnectionType.MySQL).length,
+    [ConnectionType.Oracle]: connections.filter(c => c.databaseType === ConnectionType.Oracle).length,
+    [ConnectionType.SQLServer]: connections.filter(c => c.databaseType === ConnectionType.SQLServer).length,
   };
 
   const activeConnections = connections.filter(c => c.status === ConnectionStatus.Connected).length;

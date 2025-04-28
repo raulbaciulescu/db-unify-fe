@@ -12,6 +12,11 @@ export const fetchConnections = async () => {
   return response.data;
 };
 
+export const testConnection = async (databaseId: number) => {
+  const response = await api.post(`/connections/${databaseId}/refresh`);
+  return response.data;
+};
+
 export const fetchMetadata = async (databaseId: number) => {
   const response = await api.get(`/metadata/${databaseId}/tables`);
   return response.data;

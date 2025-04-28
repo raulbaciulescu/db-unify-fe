@@ -13,15 +13,18 @@ export enum ConnectionStatus {
 }
 
 export interface DatabaseConnection {
-  id: number;
+  id: string;
   name: string;
+  databaseType: ConnectionType;
   host: string;
   port: number;
+  database: string;
   username: string;
   password: string;
-  databaseType: ConnectionType;
-  status?: ConnectionStatus;
-  favorite?: boolean;
+  status: ConnectionStatus;
+  favorite: boolean;
+  createdAt: Date;
+  updatedAt: Date;
   lastConnected?: Date;
 }
 

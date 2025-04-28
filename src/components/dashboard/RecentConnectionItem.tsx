@@ -14,7 +14,7 @@ const RecentConnectionItem: React.FC<RecentConnectionItemProps> = ({ connection 
   const { darkMode } = useTheme();
   
   const getTypeColor = () => {
-    switch (connection.type) {
+    switch (connection.databaseType) {
       case 'postgresql': return 'text-blue-600';
       case 'mysql': return 'text-orange-600';
       case 'oracle': return 'text-red-600';

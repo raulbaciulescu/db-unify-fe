@@ -1,5 +1,5 @@
 import React from 'react';
-import { DatabaseConnection, ConnectionStatus } from '../../types/connection';
+import {DatabaseConnection, ConnectionStatus, ConnectionType} from '../../types/connection';
 import { Trash2, RefreshCw, Star, Database, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
@@ -20,26 +20,26 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
   const { darkMode } = useTheme();
   
   const getTypeConfig = () => {
-    switch (connection.type) {
-      case 'postgresql':
+    switch (connection.databaseType) {
+      case ConnectionType.PostgreSQL:
         return {
           name: 'PostgreSQL',
           color: 'text-blue-600',
           bgColor: darkMode ? 'bg-blue-900 bg-opacity-20' : 'bg-blue-100'
         };
-      case 'mysql':
+      case ConnectionType.MySQL:
         return {
           name: 'MySQL',
           color: 'text-orange-600',
           bgColor: darkMode ? 'bg-orange-900 bg-opacity-20' : 'bg-orange-100'
         };
-      case 'oracle':
+      case ConnectionType.Oracle:
         return {
           name: 'Oracle',
           color: 'text-red-600',
           bgColor: darkMode ? 'bg-red-900 bg-opacity-20' : 'bg-red-100'
         };
-      case 'sqlserver':
+      case ConnectionType.SQLServer:
         return {
           name: 'SQL Server',
           color: 'text-purple-600',

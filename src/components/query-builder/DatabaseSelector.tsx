@@ -40,7 +40,7 @@ const DatabaseSelector: React.FC<DatabaseSelectorProps> = ({
         <div className="flex items-center">
           {selectedConnection ? (
             <>
-              <span className={`mr-2 ${getTypeColor(selectedConnection.type)}`}>
+              <span className={`mr-2 ${getTypeColor(selectedConnection.databaseType)}`}>
                 <Database size={16} />
               </span>
               <span className="truncate max-w-32">
@@ -76,7 +76,7 @@ const DatabaseSelector: React.FC<DatabaseSelectorProps> = ({
                       : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
-                  <span className={`mr-2 ${getTypeColor(connection.type)}`}>
+                  <span className={`mr-2 ${getTypeColor(connection.databaseType)}`}>
                     <Database size={16} />
                   </span>
                   <div className="flex-1 min-w-0">
