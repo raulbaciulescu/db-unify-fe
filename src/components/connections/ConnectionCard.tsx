@@ -125,7 +125,6 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
         
         <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} mb-3`}>
           <div>{connection.host}:{connection.port}</div>
-          <div>Database: {connection.database}</div>
           <div>Username: {connection.username}</div>
         </div>
         
