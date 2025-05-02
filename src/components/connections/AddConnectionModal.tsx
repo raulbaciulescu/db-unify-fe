@@ -107,7 +107,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ onClose }) => {
             <div className="space-y-4">
               <div>
                 <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Connection Name
+                  Database Name
                 </label>
                 <input
                     type="text"
@@ -184,24 +184,24 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ onClose }) => {
                 </div>
               </div>
 
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Database Name
-                </label>
-                <input
-                    type="text"
-                    name="database"
-                    value={formData.database}
-                    onChange={handleChange}
-                    required
-                    className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none
-                  ${darkMode
-                        ? 'bg-gray-700 border-gray-600 text-white'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    placeholder="postgres"
-                />
-              </div>
+              {/*<div>*/}
+              {/*  <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>*/}
+              {/*    Database Name*/}
+              {/*  </label>*/}
+              {/*  <input*/}
+              {/*      type="text"*/}
+              {/*      name="database"*/}
+              {/*      value={formData.database}*/}
+              {/*      onChange={handleChange}*/}
+              {/*      required*/}
+              {/*      className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none*/}
+              {/*    ${darkMode*/}
+              {/*          ? 'bg-gray-700 border-gray-600 text-white'*/}
+              {/*          : 'bg-white border-gray-300 text-gray-900'*/}
+              {/*      }`}*/}
+              {/*      placeholder="postgres"*/}
+              {/*  />*/}
+              {/*</div>*/}
 
               <div>
                 <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
