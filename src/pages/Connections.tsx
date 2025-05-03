@@ -4,7 +4,7 @@ import { useConnections } from '../context/ConnectionContext';
 import { ConnectionType, ConnectionStatus, DatabaseConnection } from '../types/connection';
 import ConnectionCard from '../components/connections/ConnectionCard';
 import AddConnectionModal from '../components/connections/AddConnectionModal';
-import { testConnection } from '../services/api';
+import { testConnection, deleteConnection } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 const Connections: React.FC = () => {
@@ -14,21 +14,22 @@ const Connections: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
 
-  const handleRemoveConnection = (id: string) => {
+  const handleRemoveConnection = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this connection?')) {
-      removeConnection(id);
+      try {
+        await deleteConnection(id);
+        removeConnection(id);
+      } catch (error) {
+        console.error('Error deleting connection:', error);
+        alert('Failed to delete connection. Please try again.');
+      }
     }
   };
 
   const handleTestConnection = async (id: string) => {
     try {
-      // Set connection to testing state
       updateConnection(id, { status: ConnectionStatus.Testing });
-
-      // Call the test endpoint
       const result = await testConnection(parseInt(id));
-
-      // Update connection status based on the response
       updateConnection(id, {
         status: result.connected ? ConnectionStatus.Connected : ConnectionStatus.Failed,
         lastConnected: result.connected ? new Date() : undefined
@@ -43,7 +44,6 @@ const Connections: React.FC = () => {
     updateConnection(id, { favorite: !currentValue });
   };
 
-  // Filter connections based on search and type filter
   const filteredConnections = connections.filter(conn => {
     const matchesSearch = conn.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         conn.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -71,7 +71,6 @@ const Connections: React.FC = () => {
           </button>
         </div>
 
-        {/* Search and filter */}
         <div className="flex flex-col md:flex-row gap-4">
           <div className={`relative flex-grow md:max-w-md ${darkMode ? 'text-white' : 'text-gray-800'}`}>
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -106,7 +105,6 @@ const Connections: React.FC = () => {
           </select>
         </div>
 
-        {/* Connection list */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredConnections.map(connection => (
               <ConnectionCard

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { DatabaseConnection } from '../types/connection';
+import { DatabaseConnection, TableSchema } from '../types/connection';
 
 const api = axios.create({
   baseURL: 'http://localhost:8080',
@@ -18,6 +18,11 @@ export const createConnection = async (connectionData: Omit<DatabaseConnection, 
   return response.data;
 };
 
+export const deleteConnection = async (connectionId: string) => {
+  const response = await api.delete(`/connections/${connectionId}`);
+  return response.data;
+};
+
 export const testConnection = async (databaseId: number) => {
   const response = await api.post(`/connections/${databaseId}/refresh`);
   return response.data;
@@ -25,5 +30,10 @@ export const testConnection = async (databaseId: number) => {
 
 export const fetchMetadata = async (databaseId: number) => {
   const response = await api.get(`/metadata/${databaseId}/tables`);
+  return response.data;
+};
+
+export const executeSqlQuery = async (connectionId: string, query: string) => {
+  const response = await api.post('/sqlCommand', { "query": query });
   return response.data;
 };
