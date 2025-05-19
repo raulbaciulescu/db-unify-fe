@@ -33,7 +33,10 @@ export const fetchMetadata = async (databaseId: number) => {
   return response.data;
 };
 
-export const executeSqlQuery = async (connectionId: string, query: string) => {
-  const response = await api.post('/sqlCommand', { "query": query });
+export const executeSqlQuery = async (connectionId: string, query: string, offset: number = 0) => {
+  const response = await api.post('/sqlCommand', {
+    query,
+    offset
+  });
   return response.data;
 };

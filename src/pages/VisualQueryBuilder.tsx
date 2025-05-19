@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useConnections } from '../context/ConnectionContext';
 import DatabaseSelector from '../components/query-builder/DatabaseSelector';
 import ResultsTable from '../components/query-builder/ResultsTable';
 import { DatabaseConnection, ConnectionStatus, TableSchema } from '../types/connection';
-import { Play, Table as TableIcon, Plus, X, ArrowRight } from 'lucide-react';
+import { Play, Table as TableIcon, Plus, X, ArrowRight, Database } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { fetchMetadata } from '../services/api';
+import { fetchMetadata, executeSqlQuery } from '../services/api';
 
 interface TableSelection {
+  connectionId: string;
   name: string;
   alias: string;
   joinType?: 'INNER JOIN' | 'LEFT JOIN' | 'RIGHT JOIN' | 'FULL JOIN';
@@ -16,6 +16,7 @@ interface TableSelection {
 }
 
 interface ColumnSelection {
+  connectionId: string;
   table: string;
   column: string;
   alias?: string;
@@ -24,13 +25,10 @@ interface ColumnSelection {
 }
 
 const VisualQueryBuilder: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const connectionId = searchParams.get('connectionId');
-  const { connections, getConnectionById } = useConnections();
+  const { connections } = useConnections();
   const { darkMode } = useTheme();
 
-  const [selectedConnection, setSelectedConnection] = useState<DatabaseConnection | null>(null);
-  const [tables, setTables] = useState<TableSchema[]>([]);
+  const [tablesMetadata, setTablesMetadata] = useState<Map<string, TableSchema[]>>(new Map());
   const [selectedTables, setSelectedTables] = useState<TableSelection[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnSelection[]>([]);
   const [whereConditions, setWhereConditions] = useState<string[]>([]);
@@ -41,56 +39,43 @@ const VisualQueryBuilder: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load metadata for all connections
   useEffect(() => {
-    if (connectionId) {
-      const connection = getConnectionById(connectionId);
-      if (connection) {
-        setSelectedConnection(connection);
-      }
-    }
-  }, [connectionId, getConnectionById]);
+    const loadAllMetadata = async () => {
+      const metadataMap = new Map<string, TableSchema[]>();
 
-  useEffect(() => {
-    const loadTables = async () => {
-      if (selectedConnection) {
+      for (const connection of connections) {
         try {
-          setIsLoading(true);
-          setError(null);
-          const metadata = await fetchMetadata(parseInt(selectedConnection.id));
-          setTables(metadata);
+          const metadata = await fetchMetadata(parseInt(connection.id));
+          metadataMap.set(connection.id, metadata);
         } catch (err) {
-          setError('Failed to fetch database metadata');
-          console.error('Error fetching metadata:', err);
-        } finally {
-          setIsLoading(false);
+          console.error(`Failed to fetch metadata for connection ${connection.id}:`, err);
         }
-      } else {
-        setTables([]);
       }
+
+      setTablesMetadata(metadataMap);
     };
 
-    loadTables();
-  }, [selectedConnection]);
+    loadAllMetadata();
+  }, [connections]);
 
-  const handleConnectionChange = (connection: DatabaseConnection) => {
-    setSelectedConnection(connection);
-    setSelectedTables([]);
-    setSelectedColumns([]);
-    setWhereConditions([]);
-    setGroupBy([]);
-    setOrderBy([]);
-    setResults(null);
-    setError(null);
-  };
+  const handleAddTable = (connectionId: string, tableName: string) => {
+    const connection = connections.find(c => c.id === connectionId);
+    if (!connection) return;
 
-  const handleAddTable = (tableName: string) => {
     const alias = `${tableName}_${selectedTables.length + 1}`;
-    setSelectedTables([...selectedTables, { name: tableName, alias }]);
+    setSelectedTables([...selectedTables, {
+      connectionId,
+      name: tableName,
+      alias
+    }]);
   };
 
   const handleRemoveTable = (index: number) => {
     setSelectedTables(selectedTables.filter((_, i) => i !== index));
-    setSelectedColumns(selectedColumns.filter(col => col.table !== selectedTables[index].alias));
+    setSelectedColumns(selectedColumns.filter(col =>
+        col.table !== selectedTables[index].alias
+    ));
   };
 
   const handleAddJoin = (index: number, type: TableSelection['joinType']) => {
@@ -99,66 +84,76 @@ const VisualQueryBuilder: React.FC = () => {
     setSelectedTables(updatedTables);
   };
 
-  const handleAddColumn = (table: string, column: string) => {
-    setSelectedColumns([...selectedColumns, { table, column }]);
+  const handleAddColumn = (connectionId: string, table: string, column: string) => {
+    setSelectedColumns([...selectedColumns, { connectionId, table, column }]);
   };
 
   const handleRemoveColumn = (index: number) => {
     setSelectedColumns(selectedColumns.filter((_, i) => i !== index));
   };
 
-  const handleExecuteQuery = () => {
+  const handleExecuteQuery = async () => {
+    if (selectedTables.length === 0) {
+      setError('Please select at least one table');
+      return;
+    }
+
     setIsLoading(true);
+    setError(null);
 
-    // Build the query
-    let query = 'SELECT ';
+    try {
+      // Build the federated query
+      let query = 'SELECT ';
 
-    if (selectedColumns.length === 0) {
-      query += '* ';
-    } else {
-      query += selectedColumns.map(col => {
-        let columnStr = '';
-        if (col.aggregate) {
-          columnStr += `${col.aggregate}(${col.table}.${col.column})`;
-        } else {
-          columnStr += `${col.table}.${col.column}`;
-        }
-        if (col.alias) {
-          columnStr += ` AS ${col.alias}`;
-        }
-        return columnStr;
-      }).join(', ');
-    }
-
-    query += '\nFROM ' + selectedTables.map((table, index) => {
-      if (index === 0) {
-        return `${table.name} ${table.alias}`;
+      if (selectedColumns.length === 0) {
+        query += '* ';
+      } else {
+        query += selectedColumns.map(col => {
+          let columnStr = '';
+          if (col.aggregate) {
+            columnStr += `${col.aggregate}(${col.table}.${col.column})`;
+          } else {
+            columnStr += `${col.table}.${col.column}`;
+          }
+          if (col.alias) {
+            columnStr += ` AS ${col.alias}`;
+          }
+          return columnStr;
+        }).join(', ');
       }
-      return `${table.joinType || 'INNER JOIN'} ${table.name} ${table.alias} ON ${table.joinCondition}`;
-    }).join('\n');
 
-    if (whereConditions.length > 0) {
-      query += '\nWHERE ' + whereConditions.join(' AND ');
+      // Add connection-specific table references
+      query += '\nFROM ' + selectedTables.map((table, index) => {
+        const connection = connections.find(c => c.id === table.connectionId);
+        if (index === 0) {
+          return `${connection?.name}.${table.name} ${table.alias}`;
+        }
+        return `${table.joinType || 'INNER JOIN'} ${connection?.name}.${table.name} ${table.alias} ON ${table.joinCondition}`;
+      }).join('\n');
+
+      if (whereConditions.length > 0) {
+        query += '\nWHERE ' + whereConditions.join(' AND ');
+      }
+
+      if (groupBy.length > 0) {
+        query += '\nGROUP BY ' + groupBy.join(', ');
+      }
+
+      if (orderBy.length > 0) {
+        query += '\nORDER BY ' + orderBy.map(o => `${o.column} ${o.direction}`).join(', ');
+      }
+
+      if (limit) {
+        query += `\nLIMIT ${limit}`;
+      }
+
+      const data = await executeSqlQuery('federated', query);
+      setResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to execute query');
+    } finally {
+      setIsLoading(false);
     }
-
-    if (groupBy.length > 0) {
-      query += '\nGROUP BY ' + groupBy.join(', ');
-    }
-
-    if (orderBy.length > 0) {
-      query += '\nORDER BY ' + orderBy.map(o => `${o.column} ${o.direction}`).join(', ');
-    }
-
-    if (limit) {
-      query += `\nLIMIT ${limit}`;
-    }
-
-    // TODO: Execute the query through the API
-    console.log('Generated Query:', query);
-
-    // For now, just show the query was built
-    setResults([{ message: 'Query built successfully', query }]);
-    setIsLoading(false);
   };
 
   return (
@@ -167,14 +162,9 @@ const VisualQueryBuilder: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold">Visual Query Builder</h1>
             <p className={`${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-              Build SQL queries visually
+              Build SQL queries visually across multiple databases
             </p>
           </div>
-          <DatabaseSelector
-              connections={connections}
-              selectedConnection={selectedConnection}
-              onSelect={handleConnectionChange}
-          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -184,88 +174,102 @@ const VisualQueryBuilder: React.FC = () => {
 
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Add Table</label>
-              <select
-                  className={`w-full p-2 rounded-md border ${
-                      darkMode
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  onChange={(e) => handleAddTable(e.target.value)}
-                  value=""
-                  disabled={isLoading}
-              >
-                <option value="" disabled>Select a table</option>
-                {tables.map(table => (
-                    <option key={table.tableName} value={table.tableName}>
-                      {table.tableName}
-                    </option>
+              <div className="space-y-2">
+                {connections.map(connection => (
+                    <div key={connection.id} className="space-y-2">
+                      <div className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {connection.name}
+                      </div>
+                      <select
+                          className={`w-full p-2 rounded-md border ${
+                              darkMode
+                                  ? 'bg-gray-700 border-gray-600 text-white'
+                                  : 'bg-white border-gray-300 text-gray-900'
+                          }`}
+                          onChange={(e) => handleAddTable(connection.id, e.target.value)}
+                          value=""
+                          disabled={isLoading}
+                      >
+                        <option value="" disabled>Select a table</option>
+                        {tablesMetadata.get(connection.id)?.map(table => (
+                            <option key={table.tableName} value={table.tableName}>
+                              {table.tableName}
+                            </option>
+                        ))}
+                      </select>
+                    </div>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div className="space-y-2">
-              {selectedTables.map((table, index) => (
-                  <div
-                      key={index}
-                      className={`p-3 rounded-md border ${
-                          darkMode
-                              ? 'bg-gray-700 border-gray-600'
-                              : 'bg-gray-50 border-gray-200'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center">
-                        <TableIcon size={16} className="mr-2" />
-                        <span className="font-medium">{table.name}</span>
-                        <span className="ml-2 text-sm text-gray-500">as {table.alias}</span>
-                      </div>
-                      <button
-                          onClick={() => handleRemoveTable(index)}
-                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-
-                    {index > 0 && (
-                        <div className="mt-2">
-                          <select
-                              className={`w-full p-1 text-sm rounded border ${
-                                  darkMode
-                                      ? 'bg-gray-600 border-gray-500'
-                                      : 'bg-white border-gray-300'
-                              }`}
-                              value={table.joinType || 'INNER JOIN'}
-                              onChange={(e) => handleAddJoin(index, e.target.value as TableSelection['joinType'])}
-                          >
-                            <option value="INNER JOIN">INNER JOIN</option>
-                            <option value="LEFT JOIN">LEFT JOIN</option>
-                            <option value="RIGHT JOIN">RIGHT JOIN</option>
-                            <option value="FULL JOIN">FULL JOIN</option>
-                          </select>
-                          <input
-                              type="text"
-                              placeholder="Join condition..."
-                              className={`w-full mt-2 p-1 text-sm rounded border ${
-                                  darkMode
-                                      ? 'bg-gray-600 border-gray-500 placeholder-gray-400'
-                                      : 'bg-white border-gray-300 placeholder-gray-500'
-                              }`}
-                              value={table.joinCondition || ''}
-                              onChange={(e) => {
-                                const updatedTables = [...selectedTables];
-                                updatedTables[index] = { ...table, joinCondition: e.target.value };
-                                setSelectedTables(updatedTables);
-                              }}
-                          />
+              {selectedTables.map((table, index) => {
+                const connection = connections.find(c => c.id === table.connectionId);
+                return (
+                    <div
+                        key={index}
+                        className={`p-3 rounded-md border ${
+                            darkMode
+                                ? 'bg-gray-700 border-gray-600'
+                                : 'bg-gray-50 border-gray-200'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center">
+                          <Database size={16} className="mr-2" />
+                          <span className="font-medium">{connection?.name}</span>
+                          <ArrowRight size={12} className="mx-1" />
+                          <span className="font-medium">{table.name}</span>
+                          <span className="ml-2 text-sm text-gray-500">as {table.alias}</span>
                         </div>
-                    )}
-                  </div>
-              ))}
+                        <button
+                            onClick={() => handleRemoveTable(index)}
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {index > 0 && (
+                          <div className="mt-2">
+                            <select
+                                className={`w-full p-1 text-sm rounded border ${
+                                    darkMode
+                                        ? 'bg-gray-600 border-gray-500'
+                                        : 'bg-white border-gray-300'
+                                }`}
+                                value={table.joinType || 'INNER JOIN'}
+                                onChange={(e) => handleAddJoin(index, e.target.value as TableSelection['joinType'])}
+                            >
+                              <option value="INNER JOIN">INNER JOIN</option>
+                              <option value="LEFT JOIN">LEFT JOIN</option>
+                              <option value="RIGHT JOIN">RIGHT JOIN</option>
+                              <option value="FULL JOIN">FULL JOIN</option>
+                            </select>
+                            <input
+                                type="text"
+                                placeholder="Join condition..."
+                                className={`w-full mt-2 p-1 text-sm rounded border ${
+                                    darkMode
+                                        ? 'bg-gray-600 border-gray-500 placeholder-gray-400'
+                                        : 'bg-white border-gray-300 placeholder-gray-500'
+                                }`}
+                                value={table.joinCondition || ''}
+                                onChange={(e) => {
+                                  const updatedTables = [...selectedTables];
+                                  updatedTables[index] = { ...table, joinCondition: e.target.value };
+                                  setSelectedTables(updatedTables);
+                                }}
+                            />
+                          </div>
+                      )}
+                    </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Columns and Conditions Panel */}
+          {/* Columns Panel */}
           <div className={`rounded-lg border p-4 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
             <h2 className="text-lg font-semibold mb-4">Columns</h2>
 
@@ -281,22 +285,23 @@ const VisualQueryBuilder: React.FC = () => {
                                   : 'bg-white border-gray-300 text-gray-900'
                           }`}
                           onChange={(e) => {
-                            const [table, column] = e.target.value.split('.');
-                            if (table && column) {
-                              handleAddColumn(table, column);
+                            const [connectionId, table, column] = e.target.value.split('.');
+                            if (connectionId && table && column) {
+                              handleAddColumn(connectionId, table, column);
                             }
                           }}
                           value=""
                       >
                         <option value="" disabled>Select a column</option>
                         {selectedTables.map(table => {
-                          const tableSchema = tables.find(t => t.tableName === table.name);
+                          const connection = connections.find(c => c.id === table.connectionId);
+                          const tableSchema = tablesMetadata.get(table.connectionId)?.find(t => t.tableName === table.name);
                           return (
-                              <optgroup key={table.alias} label={`${table.name} (${table.alias})`}>
+                              <optgroup key={`${table.connectionId}.${table.name}`} label={`${connection?.name} - ${table.name}`}>
                                 {tableSchema?.columns.map(column => (
                                     <option
-                                        key={`${table.alias}.${column.columnName}`}
-                                        value={`${table.alias}.${column.columnName}`}
+                                        key={`${table.connectionId}.${table.alias}.${column.columnName}`}
+                                        value={`${table.connectionId}.${table.alias}.${column.columnName}`}
                                     >
                                       {column.columnName} ({column.dataType})
                                     </option>
@@ -318,31 +323,37 @@ const VisualQueryBuilder: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    {selectedColumns.map((col, index) => (
-                        <div
-                            key={index}
-                            className={`p-2 rounded-md border flex items-center justify-between ${
-                                darkMode
-                                    ? 'bg-gray-700 border-gray-600'
-                                    : 'bg-gray-50 border-gray-200'
-                            }`}
-                        >
-                          <div className="flex items-center">
-                            <span className="font-medium">{col.table}</span>
-                            <ArrowRight size={16} className="mx-1" />
-                            <span>{col.column}</span>
-                            {col.aggregate && (
-                                <span className="ml-2 text-sm text-gray-500">({col.aggregate})</span>
-                            )}
-                          </div>
-                          <button
-                              onClick={() => handleRemoveColumn(index)}
-                              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                    {selectedColumns.map((col, index) => {
+                      const table = selectedTables.find(t => t.alias === col.table);
+                      const connection = connections.find(c => c.id === table?.connectionId);
+                      return (
+                          <div
+                              key={index}
+                              className={`p-2 rounded-md border flex items-center justify-between ${
+                                  darkMode
+                                      ? 'bg-gray-700 border-gray-600'
+                                      : 'bg-gray-50 border-gray-200'
+                              }`}
                           >
-                            <X size={16} />
-                          </button>
-                        </div>
-                    ))}
+                            <div className="flex items-center">
+                              <span className="font-medium">{connection?.name}</span>
+                              <ArrowRight size={12} className="mx-1" />
+                              <span className="font-medium">{col.table}</span>
+                              <ArrowRight size={12} className="mx-1" />
+                              <span>{col.column}</span>
+                              {col.aggregate && (
+                                  <span className="ml-2 text-sm text-gray-500">({col.aggregate})</span>
+                              )}
+                            </div>
+                            <button
+                                onClick={() => handleRemoveColumn(index)}
+                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                      );
+                    })}
                   </div>
                 </div>
             ) : (
@@ -352,7 +363,7 @@ const VisualQueryBuilder: React.FC = () => {
             )}
           </div>
 
-          {/* Conditions and Options Panel */}
+          {/* Conditions Panel */}
           <div className={`rounded-lg border p-4 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
             <h2 className="text-lg font-semibold mb-4">Conditions</h2>
 
