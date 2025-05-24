@@ -75,30 +75,6 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
 
             <div>
               <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                Database Connection
-              </label>
-              <select
-                name="connectionId"
-                value={formData.connectionId}
-                onChange={handleChange}
-                required
-                className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none
-                  ${darkMode 
-                    ? 'bg-gray-700 border-gray-600 text-white' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-              >
-                <option value="">Select a connection</option>
-                {connections.map(conn => (
-                  <option key={conn.id} value={conn.id}>
-                    {conn.name} ({conn.host}:{conn.port})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                 Schedule (Cron Expression)
               </label>
               <input
@@ -170,4 +146,4 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
   );
 };
 
-export default AddJobModal
+export default AddJobModal;
