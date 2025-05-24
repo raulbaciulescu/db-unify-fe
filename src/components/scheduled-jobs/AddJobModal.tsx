@@ -169,3 +169,5 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
     </div>
   );
 };
+
+export default AddJobModal
