@@ -93,3 +93,5 @@ const JobCard: React.FC<JobCardProps> = ({ job, onDelete, onToggle }) => {
     </div>
   );
 };
+
+export default JobCard
