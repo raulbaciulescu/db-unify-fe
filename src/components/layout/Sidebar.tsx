@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Database, FileCode, TableProperties, Settings, Blocks } from 'lucide-react';
+import { Home, Database, FileCode, TableProperties, Settings, Blocks, Calendar } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 interface SidebarProps {
@@ -51,6 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
           <NavItem to="/query-builder" icon={<FileCode size={20} />} label="Query Builder" isOpen={isOpen} />
           <NavItem to="/visual-query-builder" icon={<Blocks size={20} />} label="Visual Builder" isOpen={isOpen} />
           <NavItem to="/table-explorer" icon={<TableProperties size={20} />} label="Table Explorer" isOpen={isOpen} />
+          <NavItem to="/scheduled-jobs" icon={<Calendar size={20} />} label="Scheduled Jobs" isOpen={isOpen} />
           <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" isOpen={isOpen} />
         </nav>
       </div>

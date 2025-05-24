@@ -6,6 +6,7 @@ import Connections from './pages/Connections';
 import QueryBuilder from './pages/QueryBuilder';
 import VisualQueryBuilder from './pages/VisualQueryBuilder';
 import TableExplorer from './pages/TableExplorer';
+import ScheduledJobs from './pages/ScheduledJobs';
 import Settings from './pages/Settings';
 import { ThemeProvider } from './context/ThemeContext';
 import { ConnectionProvider } from './context/ConnectionContext';
@@ -22,6 +23,7 @@ function App() {
               <Route path="/query-builder" element={<QueryBuilder />} />
               <Route path="/visual-query-builder" element={<VisualQueryBuilder />} />
               <Route path="/table-explorer" element={<TableExplorer />} />
+              <Route path="/scheduled-jobs" element={<ScheduledJobs />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </Layout>

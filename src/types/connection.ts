@@ -42,3 +42,16 @@ export interface ColumnSchema {
   referencedTable?: string;
   referencedColumn?: string;
 }
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  connectionId: string;
+  query: string;
+  schedule: string;
+  enabled: boolean;
+  lastRun?: Date;
+  nextRun?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
