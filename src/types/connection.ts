@@ -18,7 +18,6 @@ export interface DatabaseConnection {
   databaseType: ConnectionType;
   host: string;
   port: number;
-  database: string;
   username: string;
   password: string;
   status: ConnectionStatus;
