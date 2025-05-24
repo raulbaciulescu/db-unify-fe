@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { DatabaseConnection, TableSchema } from '../types/connection';
+import { DatabaseConnection, TableSchema, ScheduledJob, JobResult } from '../types/connection';
 
 const api = axios.create({
   baseURL: 'http://localhost:8080',
@@ -39,4 +39,24 @@ export const executeSqlQuery = async (connectionId: string, query: string, offse
     offset
   });
   return response.data;
+};
+
+// Scheduled Jobs API
+export const createScheduledJob = async (jobData: { name: string; cron: string; query: string }) => {
+  const response = await api.post('/api/scheduled-jobs', jobData);
+  return response.data;
+};
+
+export const fetchScheduledJobs = async () => {
+  const response = await api.get('/api/scheduled-jobs');
+  return response.data;
+};
+
+export const fetchJobResults = async (jobId: number) => {
+  const response = await api.get(`/api/scheduled-jobs/${jobId}/results`);
+  return response.data;
+};
+
+export const getJobResultDownloadUrl = (resultId: number) => {
+  return `/api/scheduled-jobs/results/${resultId}/download`;
 };

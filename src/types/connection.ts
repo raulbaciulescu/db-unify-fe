@@ -43,14 +43,18 @@ export interface ColumnSchema {
 }
 
 export interface ScheduledJob {
-  id: string;
+  id: number;
   name: string;
-  connectionId: string;
+  cron: string;
   query: string;
-  schedule: string;
-  enabled: boolean;
-  lastRun?: Date;
-  nextRun?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+}
+
+export interface JobResult {
+  id: number;
+  startedAt: string;
+  endedAt: string;
+  success: boolean;
+  resultPath?: string;
+  error?: string;
 }

@@ -1,45 +1,44 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
-import { DatabaseConnection, ScheduledJob } from '../../types/connection';
+import { createScheduledJob } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import QueryEditor from '../query-builder/QueryEditor';
 
 interface AddJobModalProps {
   onClose: () => void;
-  onAdd: (job: ScheduledJob) => void;
-  connections: DatabaseConnection[];
+  onAdd: () => void;
 }
 
-const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }) => {
+const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd }) => {
   const { darkMode } = useTheme();
   const [formData, setFormData] = useState({
     name: '',
-    connectionId: '',
-    query: '',
-    schedule: '0 0 * * *', // Default to daily at midnight
-    enabled: true
+    cron: '0 0 * * *', // Default to daily at midnight
+    query: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const newJob: ScheduledJob = {
-      id: uuidv4(),
-      ...formData,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    onAdd(newJob);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await createScheduledJob(formData);
+      onAdd();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create job');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
-    });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
   };
 
   return (
@@ -51,6 +50,12 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
             <X size={20} />
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-md bg-red-100 text-red-700 dark:bg-red-900 dark:bg-opacity-20 dark:text-red-400">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
@@ -79,8 +84,8 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
               </label>
               <input
                 type="text"
-                name="schedule"
-                value={formData.schedule}
+                name="cron"
+                value={formData.cron}
                 onChange={handleChange}
                 required
                 className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none
@@ -105,20 +110,6 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
                 darkMode={darkMode}
               />
             </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="enabled"
-                name="enabled"
-                checked={formData.enabled}
-                onChange={handleChange}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="enabled" className="ml-2 text-sm font-medium">
-                Enable job immediately
-              </label>
-            </div>
           </div>
 
           <div className="flex justify-end gap-2 mt-6">
@@ -135,9 +126,11 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ onClose, onAdd, connections }
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={isSubmitting}
+              className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors
+                ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              Add Job
+              {isSubmitting ? 'Creating...' : 'Create Job'}
             </button>
           </div>
         </form>
