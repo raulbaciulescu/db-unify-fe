@@ -42,3 +42,20 @@ export interface ColumnSchema {
   referencedTable?: string;
   referencedColumn?: string;
 }
+
+export interface ScheduledJob {
+  id: number;
+  name: string;
+  cron: string;
+  query: string;
+  createdAt: string;
+}
+
+export interface JobResult {
+  id: number;
+  startedAt: string;
+  endedAt: string;
+  success: boolean;
+  resultPath?: string;
+  error?: string;
+}
