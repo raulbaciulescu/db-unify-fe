@@ -19,22 +19,8 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ data, darkMode }) => {
     );
   }
 
-  // Check if this is a non-select query result (like INSERT, UPDATE)
-  if (!Array.isArray(data.results)) {
-    const message = data.message || 'Operation completed successfully';
-    const affectedRows = data.affectedRows;
-
-    return (
-      <div className={`p-4 rounded-md ${darkMode ? 'bg-gray-900 text-green-400' : 'bg-green-100 text-green-800'}`}>
-        <p>{message}</p>
-        {affectedRows !== undefined && (
-          <p className="mt-1">Affected rows: {affectedRows}</p>
-        )}
-      </div>
-    );
-  }
-
-  const results = data.results;
+  // Get the actual results array
+  const results = Array.isArray(data) ? data : (data.results || []);
 
   // Handle empty results
   if (results.length === 0) {
