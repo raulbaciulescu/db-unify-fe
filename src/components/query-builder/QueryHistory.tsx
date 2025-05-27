@@ -1,9 +1,9 @@
 import React from 'react';
-import { Clock, ArrowRight } from 'lucide-react';
+import { Clock, ArrowRight, Timer } from 'lucide-react';
 import { formatDistanceToNow } from '../../utils/date';
 
 interface QueryHistoryProps {
-  history: {id: string, query: string, timestamp: Date}[];
+  history: {id: string, query: string, timestamp: Date, executionTime?: number}[];
   onSelectQuery: (query: string) => void;
   darkMode: boolean;
 }
@@ -39,9 +39,19 @@ const QueryHistory: React.FC<QueryHistoryProps> = ({ history, onSelectQuery, dar
                   {getQueryPreview(item.query)}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {formatDistanceToNow(new Date(item.timestamp))}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {formatDistanceToNow(new Date(item.timestamp))}
+                    </span>
+                    {item.executionTime && (
+                      <span className={`flex items-center text-xs
+                        ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}
+                      >
+                        <Timer size={12} className="mr-1" />
+                        {item.executionTime.toFixed(2)}ms
+                      </span>
+                    )}
+                  </div>
                   <button 
                     className={`text-xs flex items-center 
                       ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
