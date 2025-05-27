@@ -169,7 +169,7 @@ const QueryBuilder: React.FC = () => {
           <div className="h-[calc(100%-200px)]">
             <div className={`text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
               Results
-              {isLoading && hasMoreData && <span className="ml-2 text-blue-500">(Loading more...)</span>}
+              {isRunning && hasMoreData && <span className="ml-2 text-blue-500">(Loading more...)</span>}
             </div>
 
             {error ? (
