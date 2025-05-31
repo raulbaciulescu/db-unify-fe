@@ -22,9 +22,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           <Menu size={24} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500">
-            <Database size={24} className="text-white" />
-          </div>
+          <Database size={24} className="text-teal-600" />
           <h1 className="text-xl font-bold">DB Unify</h1>
         </div>
       </div>
