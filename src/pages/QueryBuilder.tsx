@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import QueryEditor from '../components/query-builder/QueryEditor';
 import ResultsTable from '../components/query-builder/ResultsTable';
 import QueryHistory from '../components/query-builder/QueryHistory';
-import { Play, Save, Clock } from 'lucide-react';
+import { Play, Save, Clock, Timer } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { executeSqlQuery } from '../services/api';
 
@@ -13,9 +13,10 @@ const QueryBuilder: React.FC = () => {
   const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState<boolean>(false);
-  const [queryHistory, setQueryHistory] = useState<{id: string, query: string, timestamp: Date}[]>([]);
+  const [queryHistory, setQueryHistory] = useState<{id: string, query: string, timestamp: Date, executionTime?: number}[]>([]);
   const [currentOffset, setCurrentOffset] = useState<number>(0);
   const [hasMoreData, setHasMoreData] = useState<boolean>(true);
+  const [executionTime, setExecutionTime] = useState<number | null>(null);
 
   const handleRunQuery = async (loadMore: boolean = false, explicitOffset?: number) => {
     if (!query.trim() && !loadMore) {
@@ -29,11 +30,17 @@ const QueryBuilder: React.FC = () => {
       setResults(null);
       setCurrentOffset(0);
       setHasMoreData(true);
+      setExecutionTime(null);
     }
+
+    const startTime = performance.now();
 
     try {
       const offset = explicitOffset ?? (loadMore ? currentOffset : 0);
       const response = await executeSqlQuery('default', query, offset);
+
+      const endTime = performance.now();
+      const queryTime = endTime - startTime;
 
       setResults(prevResults => {
         if (loadMore && prevResults) {
@@ -44,9 +51,9 @@ const QueryBuilder: React.FC = () => {
 
       setCurrentOffset(response.offset);
       setHasMoreData(!response.isDone);
+      setExecutionTime(queryTime);
 
       if (!response.isDone) {
-        // Pass the updated offset explicitly
         handleRunQuery(true, response.offset);
       }
 
@@ -54,7 +61,8 @@ const QueryBuilder: React.FC = () => {
         const newHistoryItem = {
           id: `query-${Date.now()}`,
           query,
-          timestamp: new Date()
+          timestamp: new Date(),
+          executionTime: queryTime
         };
         setQueryHistory([newHistoryItem, ...queryHistory]);
       }
@@ -63,13 +71,13 @@ const QueryBuilder: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to execute query');
       setResults(null);
       setHasMoreData(false);
+      setExecutionTime(null);
     } finally {
       if (!loadMore) {
         setIsRunning(false);
       }
     }
   };
-
 
   const handleQuerySelect = (selectedQuery: string) => {
     setQuery(selectedQuery);
@@ -79,6 +87,7 @@ const QueryBuilder: React.FC = () => {
     setResults(null);
     setIsRunning(false);
     setError(null);
+    setExecutionTime(null);
   };
 
   return (
@@ -91,6 +100,17 @@ const QueryBuilder: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {executionTime !== null && (
+                <div className={`flex items-center px-3 py-1.5 rounded-md text-sm
+              ${darkMode
+                    ? 'bg-blue-900/20 text-blue-400'
+                    : 'bg-blue-50 text-blue-600'
+                }`}
+                >
+                  <Timer size={14} className="mr-1.5" />
+                  {executionTime.toFixed(2)}ms
+                </div>
+            )}
             <button
                 onClick={() => setShowHistory(!showHistory)}
                 className={`p-2 rounded-md border transition-colors

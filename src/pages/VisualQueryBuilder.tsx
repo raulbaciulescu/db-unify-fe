@@ -3,7 +3,7 @@ import { useConnections } from '../context/ConnectionContext';
 import DatabaseSelector from '../components/query-builder/DatabaseSelector';
 import ResultsTable from '../components/query-builder/ResultsTable';
 import { DatabaseConnection, ConnectionStatus, TableSchema } from '../types/connection';
-import { Play, Table as TableIcon, Plus, X, ArrowRight, Database } from 'lucide-react';
+import { Play, Table as TableIcon, Plus, X, ArrowRight, Database, AlertCircle } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { fetchMetadata, executeSqlQuery } from '../services/api';
 
@@ -24,11 +24,17 @@ interface ColumnSelection {
   condition?: string;
 }
 
+interface MetadataState {
+  data: TableSchema[];
+  error: string | null;
+  loading: boolean;
+}
+
 const VisualQueryBuilder: React.FC = () => {
   const { connections } = useConnections();
   const { darkMode } = useTheme();
 
-  const [tablesMetadata, setTablesMetadata] = useState<Map<string, TableSchema[]>>(new Map());
+  const [tablesMetadata, setTablesMetadata] = useState<Map<string, MetadataState>>(new Map());
   const [selectedTables, setSelectedTables] = useState<TableSelection[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnSelection[]>([]);
   const [whereConditions, setWhereConditions] = useState<string[]>([]);
@@ -42,24 +48,42 @@ const VisualQueryBuilder: React.FC = () => {
   // Load metadata for all connections
   useEffect(() => {
     const loadAllMetadata = async () => {
-      const metadataMap = new Map<string, TableSchema[]>();
+      const metadataMap = new Map<string, MetadataState>();
 
       for (const connection of connections) {
+        // Initialize state for this connection
+        metadataMap.set(connection.id, {
+          data: [],
+          error: null,
+          loading: true
+        });
+        setTablesMetadata(new Map(metadataMap));
+
         try {
           const metadata = await fetchMetadata(parseInt(connection.id));
-          metadataMap.set(connection.id, metadata);
+          metadataMap.set(connection.id, {
+            data: metadata || [], // Ensure we always have an array
+            error: null,
+            loading: false
+          });
         } catch (err) {
           console.error(`Failed to fetch metadata for connection ${connection.id}:`, err);
+          metadataMap.set(connection.id, {
+            data: [],
+            error: 'Failed to load tables',
+            loading: false
+          });
         }
+        setTablesMetadata(new Map(metadataMap));
       }
-
-      setTablesMetadata(metadataMap);
     };
 
     loadAllMetadata();
   }, [connections]);
 
   const handleAddTable = (connectionId: string, tableName: string) => {
+    if (!tableName) return;
+
     const connection = connections.find(c => c.id === connectionId);
     if (!connection) return;
 
@@ -85,6 +109,7 @@ const VisualQueryBuilder: React.FC = () => {
   };
 
   const handleAddColumn = (connectionId: string, table: string, column: string) => {
+    if (!connectionId || !table || !column) return;
     setSelectedColumns([...selectedColumns, { connectionId, table, column }]);
   };
 
@@ -174,31 +199,48 @@ const VisualQueryBuilder: React.FC = () => {
 
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Add Table</label>
-              <div className="space-y-2">
-                {connections.map(connection => (
-                    <div key={connection.id} className="space-y-2">
-                      <div className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {connection.name}
+              <div className="space-y-4">
+                {connections.map(connection => {
+                  const metadata = tablesMetadata.get(connection.id);
+                  return (
+                      <div key={connection.id} className="space-y-2">
+                        <div className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {connection.name}
+                        </div>
+
+                        {metadata?.loading ? (
+                            <div className="flex items-center justify-center p-4">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                            </div>
+                        ) : metadata?.error ? (
+                            <div className={`flex items-center p-2 rounded-md text-sm
+                        ${darkMode ? 'bg-red-900/20 text-red-400' : 'bg-red-50 text-red-600'}`}
+                            >
+                              <AlertCircle size={16} className="mr-2" />
+                              {metadata.error}
+                            </div>
+                        ) : (
+                            <select
+                                className={`w-full p-2 rounded-md border ${
+                                    darkMode
+                                        ? 'bg-gray-700 border-gray-600 text-white'
+                                        : 'bg-white border-gray-300 text-gray-900'
+                                }`}
+                                onChange={(e) => handleAddTable(connection.id, e.target.value)}
+                                value=""
+                                disabled={isLoading}
+                            >
+                              <option value="" disabled>Select a table</option>
+                              {metadata?.data.map(table => (
+                                  <option key={table.tableName} value={table.tableName}>
+                                    {table.tableName}
+                                  </option>
+                              ))}
+                            </select>
+                        )}
                       </div>
-                      <select
-                          className={`w-full p-2 rounded-md border ${
-                              darkMode
-                                  ? 'bg-gray-700 border-gray-600 text-white'
-                                  : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          onChange={(e) => handleAddTable(connection.id, e.target.value)}
-                          value=""
-                          disabled={isLoading}
-                      >
-                        <option value="" disabled>Select a table</option>
-                        {tablesMetadata.get(connection.id)?.map(table => (
-                            <option key={table.tableName} value={table.tableName}>
-                              {table.tableName}
-                            </option>
-                        ))}
-                      </select>
-                    </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -295,7 +337,25 @@ const VisualQueryBuilder: React.FC = () => {
                         <option value="" disabled>Select a column</option>
                         {selectedTables.map(table => {
                           const connection = connections.find(c => c.id === table.connectionId);
-                          const tableSchema = tablesMetadata.get(table.connectionId)?.find(t => t.tableName === table.name);
+                          const metadata = tablesMetadata.get(table.connectionId);
+                          const tableSchema = metadata?.data.find(t => t.tableName === table.name);
+
+                          if (metadata?.loading) {
+                            return (
+                                <optgroup key={`${table.connectionId}.${table.name}`} label="Loading...">
+                                  <option disabled>Loading columns...</option>
+                                </optgroup>
+                            );
+                          }
+
+                          if (metadata?.error) {
+                            return (
+                                <optgroup key={`${table.connectionId}.${table.name}`} label={`${connection?.name} - Error`}>
+                                  <option disabled>Failed to load columns</option>
+                                </optgroup>
+                            );
+                          }
+
                           return (
                               <optgroup key={`${table.connectionId}.${table.name}`} label={`${connection?.name} - ${table.name}`}>
                                 {tableSchema?.columns.map(column => (
