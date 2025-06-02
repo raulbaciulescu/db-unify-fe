@@ -45,9 +45,9 @@ const Connections: React.FC = () => {
   };
 
   const filteredConnections = connections.filter(conn => {
-    const matchesSearch = conn.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        conn.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        conn.database.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (conn.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (conn.host || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (conn.database || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesType = filterType === 'all' || conn.databaseType === filterType;
 
