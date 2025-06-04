@@ -11,7 +11,7 @@ interface TableSelection {
   connectionId: string;
   name: string;
   alias: string;
-  joinType?: 'INNER JOIN';
+  joinType?: 'INNER JOIN' | 'LEFT JOIN' | 'RIGHT JOIN' | 'FULL JOIN';
   joinCondition?: string;
 }
 
@@ -21,6 +21,7 @@ interface ColumnSelection {
   column: string;
   alias?: string;
   aggregate?: 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX';
+  condition?: string;
 }
 
 interface WhereCondition {
@@ -38,7 +39,6 @@ const VisualQueryBuilder: React.FC = () => {
   const { connections } = useConnections();
   const { darkMode } = useTheme();
 
-  const [tablesMetadata, setTablesMetadata] = useState<Map<string, MetadataState>>(new Map());
   const [selectedTables, setSelectedTables] = useState<TableSelection[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnSelection[]>([]);
   const [whereConditions, setWhereConditions] = useState<WhereCondition[]>([]);
@@ -48,6 +48,9 @@ const VisualQueryBuilder: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newWhereCondition, setNewWhereCondition] = useState('');
+  const [newColumnAggregate, setNewColumnAggregate] = useState<string>('');
+  const [newColumnSelection, setNewColumnSelection] = useState<string>('');
+  const [tablesMetadata, setTablesMetadata] = useState<Map<string, MetadataState>>(new Map());
 
   useEffect(() => {
     const loadAllMetadata = async () => {
@@ -89,15 +92,11 @@ const VisualQueryBuilder: React.FC = () => {
     const connection = connections.find(c => c.id === connectionId);
     if (!connection) return;
 
-    const existingAliases = selectedTables.map(t => t.alias);
-    let alias = tableName;
+    const alias = tableName.toLowerCase();
 
-    if (existingAliases.includes(alias)) {
-      let counter = 1;
-      while (existingAliases.includes(`${tableName}_${counter}`)) {
-        counter++;
-      }
-      alias = `${tableName}_${counter}`;
+    if (selectedTables.some(t => t.alias === alias)) {
+      setError('Table already added');
+      return;
     }
 
     setSelectedTables([...selectedTables, {
@@ -120,9 +119,30 @@ const VisualQueryBuilder: React.FC = () => {
     setSelectedTables(updatedTables);
   };
 
-  const handleAddColumn = (connectionId: string, table: string, column: string) => {
-    if (!connectionId || !table || !column) return;
-    setSelectedColumns([...selectedColumns, { connectionId, table, column }]);
+  const handleAddColumn = () => {
+    if (!newColumnSelection && newColumnAggregate !== 'COUNT') return;
+    if (newColumnAggregate === 'COUNT') {
+      // For COUNT, we don't need a column selection
+      const [connectionId, table] = newColumnSelection.split('.') || [selectedTables[0].connectionId, selectedTables[0].alias];
+      setSelectedColumns([...selectedColumns, {
+        connectionId,
+        table,
+        column: '*',
+        aggregate: 'COUNT'
+      }]);
+    } else {
+      const [connectionId, table, column] = newColumnSelection.split('.');
+      if (!connectionId || !table || !column) return;
+
+      setSelectedColumns([...selectedColumns, {
+        connectionId,
+        table,
+        column,
+        aggregate: newColumnAggregate as 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | undefined
+      }]);
+    }
+    setNewColumnSelection('');
+    setNewColumnAggregate('');
   };
 
   const handleRemoveColumn = (index: number) => {
@@ -165,34 +185,46 @@ const VisualQueryBuilder: React.FC = () => {
     try {
       let query = 'SELECT ';
 
-      // Handle columns with new format
       if (selectedColumns.length === 0) {
         query += '* ';
       } else {
         query += selectedColumns.map(col => {
-          const connection = connections.find(c => c.id === col.connectionId);
           let columnStr = '';
-          if (col.aggregate) {
-            columnStr += `${col.aggregate}(${connection?.name}.${col.table}.${col.column})`;
+          const table = selectedTables.find(t => t.alias === col.table);
+          const connection = connections.find(c => c.id === table?.connectionId);
+
+          if (col.aggregate === 'COUNT') {
+            columnStr = `COUNT(*)`;
+          } else if (col.aggregate) {
+            columnStr = `${col.aggregate}(${connection?.name}.${col.table}.${col.column})`;
           } else {
-            columnStr += `${connection?.name}.${col.table}.${col.column}`;
+            columnStr = `${connection?.name}.${col.table}.${col.column}`;
+          }
+
+          if (col.alias) {
+            columnStr += ` AS ${col.alias}`;
           }
           return columnStr;
         }).join(', ');
       }
 
-      // Handle FROM clause with JOINs
-      query += '\nFROM ' + selectedTables.map((table, index) => {
-        const connection = connections.find(c => c.id === table.connectionId);
-        if (index === 0) {
-          return `${connection?.name}.${table.name}`;
-        }
-        return `INNER JOIN ${connection?.name}.${table.name}${
-            table.joinCondition ? ` ON ${table.joinCondition}` : ''
-        }`;
-      }).join('\n');
+      // Build FROM clause
+      const firstTable = selectedTables[0];
+      const firstConnection = connections.find(c => c.id === firstTable.connectionId);
+      query += `\nFROM ${firstConnection?.name}.${firstTable.name} ${firstTable.alias}`;
 
-      // Handle WHERE conditions
+      // Add JOINs if any
+      if (selectedTables.length > 1) {
+        const joins = selectedTables.slice(1).map(table => {
+          const connection = connections.find(c => c.id === table.connectionId);
+          return `${table.joinType || 'INNER JOIN'} ${connection?.name}.${table.name} ${table.alias}${
+              table.joinCondition ? ` ON ${table.joinCondition}` : ''
+          }`;
+        });
+        query += '\n' + joins.join('\n');
+      }
+
+      // Add WHERE clause
       if (whereConditions.length > 0) {
         const conditions = whereConditions.map(wc => wc.condition).filter(Boolean);
         if (conditions.length > 0) {
@@ -200,20 +232,19 @@ const VisualQueryBuilder: React.FC = () => {
         }
       }
 
-      // Handle GROUP BY with new format
+      // Add GROUP BY clause
       if (groupByColumns.length > 0) {
-        query += '\nGROUP BY ' + groupByColumns.map(column => {
-          const [table, col] = column.split('.');
-          const tableSelection = selectedTables.find(t => t.alias === table);
-          if (tableSelection) {
-            const connection = connections.find(c => c.id === tableSelection.connectionId);
-            return `${connection?.name}.${table}.${col}`;
-          }
-          return column;
-        }).join(', ');
+        // Ensure each group by column includes the database name
+        const fullGroupByColumns = groupByColumns.map(column => {
+          const [tableAlias, columnName] = column.split('.');
+          const table = selectedTables.find(t => t.alias === tableAlias);
+          const connection = connections.find(c => c.id === table?.connectionId);
+          return `${connection?.name}.${tableAlias}.${columnName}`;
+        });
+        query += '\nGROUP BY ' + fullGroupByColumns.join(', ');
       }
 
-      // Handle LIMIT
+      // Add LIMIT clause
       if (limit > 0) {
         query += `\nLIMIT ${limit}`;
       }
@@ -332,6 +363,9 @@ const VisualQueryBuilder: React.FC = () => {
                                 onChange={(e) => handleAddJoin(index, e.target.value as TableSelection['joinType'])}
                             >
                               <option value="INNER JOIN">INNER JOIN</option>
+                              <option value="LEFT JOIN">LEFT JOIN</option>
+                              <option value="RIGHT JOIN">RIGHT JOIN</option>
+                              <option value="FULL JOIN">FULL JOIN</option>
                             </select>
                             <input
                                 type="text"
@@ -364,57 +398,62 @@ const VisualQueryBuilder: React.FC = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">Add Column</label>
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
                       <select
-                          className={`flex-1 p-2 rounded-md border ${
+                          className={`w-full p-2 rounded-md border ${
                               darkMode
                                   ? 'bg-gray-700 border-gray-600 text-white'
                                   : 'bg-white border-gray-300 text-gray-900'
                           }`}
-                          onChange={(e) => {
-                            const [connectionId, table, column] = e.target.value.split('.');
-                            if (connectionId && table && column) {
-                              handleAddColumn(connectionId, table, column);
-                            }
-                          }}
-                          value=""
+                          value={newColumnAggregate}
+                          onChange={(e) => setNewColumnAggregate(e.target.value)}
                       >
-                        <option value="" disabled>Select a column</option>
-                        {selectedTables.map(table => {
-                          const connection = connections.find(c => c.id === table.connectionId);
-                          const metadata = tablesMetadata.get(table.connectionId);
-                          const tableSchema = metadata?.data.find(t => t.tableName === table.name);
-
-                          if (metadata?.loading) {
-                            return (
-                                <optgroup key={`${table.connectionId}.${table.name}`} label="Loading...">
-                                  <option disabled>Loading columns...</option>
-                                </optgroup>
-                            );
-                          }
-
-                          if (metadata?.error) {
-                            return (
-                                <optgroup key={`${table.connectionId}.${table.name}`} label={`${connection?.name} - Error`}>
-                                  <option disabled>Failed to load columns</option>
-                                </optgroup>
-                            );
-                          }
-
-                          return (
-                              <optgroup key={`${table.connectionId}.${table.name}`} label={`${connection?.name} - ${table.name}`}>
-                                {tableSchema?.columns.map(column => (
-                                    <option
-                                        key={`${table.connectionId}.${table.alias}.${column.columnName}`}
-                                        value={`${table.connectionId}.${table.alias}.${column.columnName}`}
-                                    >
-                                      {column.columnName} ({column.dataType})
-                                    </option>
-                                ))}
-                              </optgroup>
-                          );
-                        })}
+                        <option value="">No Aggregate</option>
+                        <option value="COUNT">COUNT(*)</option>
+                        <option value="SUM">SUM</option>
+                        <option value="MIN">MIN</option>
+                        <option value="MAX">MAX</option>
+                        <option value="AVG">AVG</option>
                       </select>
+
+                      {newColumnAggregate !== 'COUNT' && (
+                          <select
+                              className={`w-full p-2 rounded-md border ${
+                                  darkMode
+                                      ? 'bg-gray-700 border-gray-600 text-white'
+                                      : 'bg-white border-gray-300 text-gray-900'
+                              }`}
+                              value={newColumnSelection}
+                              onChange={(e) => setNewColumnSelection(e.target.value)}
+                          >
+                            <option value="">Select a column</option>
+                            {selectedTables.map(table => {
+                              const connection = connections.find(c => c.id === table.connectionId);
+                              const metadata = tablesMetadata.get(table.connectionId);
+                              const tableSchema = metadata?.data.find(t => t.tableName === table.name);
+
+                              return tableSchema?.columns.map(column => (
+                                  <option
+                                      key={`${table.connectionId}.${table.alias}.${column.columnName}`}
+                                      value={`${table.connectionId}.${table.alias}.${column.columnName}`}
+                                  >
+                                    {`${connection?.name}.${table.name}.${column.columnName}`}
+                                  </option>
+                              ));
+                            })}
+                          </select>
+                      )}
+
+                      <button
+                          onClick={handleAddColumn}
+                          className={`w-full p-2 rounded-md border ${
+                              darkMode
+                                  ? 'border-gray-600 hover:bg-gray-700'
+                                  : 'border-gray-300 hover:bg-gray-100'
+                          }`}
+                      >
+                        Add Column
+                      </button>
                     </div>
                   </div>
 
@@ -436,10 +475,9 @@ const VisualQueryBuilder: React.FC = () => {
                               <ArrowRight size={12} className="mx-1 flex-shrink-0" />
                               <span className="font-medium truncate">{col.table}</span>
                               <ArrowRight size={12} className="mx-1 flex-shrink-0" />
-                              <span className="truncate">{col.column}</span>
-                              {col.aggregate && (
-                                  <span className="ml-2 text-sm text-gray-500">({col.aggregate})</span>
-                              )}
+                              <span className="truncate">
+                          {col.aggregate ? `${col.aggregate}(${col.column})` : col.column}
+                        </span>
                             </div>
                             <button
                                 onClick={() => handleRemoveColumn(index)}
@@ -537,15 +575,18 @@ const VisualQueryBuilder: React.FC = () => {
                         value=""
                     >
                       <option value="" disabled>Add group by column...</option>
-                      {selectedColumns.map((col, index) => (
-                          <option
-                              key={index}
-                              value={`${col.table}.${col.column}`}
-                              disabled={groupByColumns.includes(`${col.table}.${col.column}`)}
-                          >
-                            {col.table}.{col.column}
-                          </option>
-                      ))}
+                      {selectedColumns
+                          .filter(col => !col.aggregate)
+                          .map((col, index) => (
+                              <option
+                                  key={index}
+                                  value={`${col.table}.${col.column}`}
+                                  disabled={groupByColumns.includes(`${col.table}.${col.column}`)}
+                              >
+                                {col.table}.{col.column}
+                              </option>
+                          ))
+                      }
                     </select>
 
                     <div className="mt-2 space-y-2">
