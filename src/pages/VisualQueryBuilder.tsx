@@ -11,7 +11,7 @@ interface TableSelection {
   connectionId: string;
   name: string;
   alias: string;
-  joinType?: 'INNER JOIN' | 'LEFT JOIN' | 'RIGHT JOIN' | 'FULL JOIN';
+  joinType?: 'INNER JOIN';
   joinCondition?: string;
 }
 
@@ -21,7 +21,11 @@ interface ColumnSelection {
   column: string;
   alias?: string;
   aggregate?: 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX';
-  condition?: string;
+}
+
+interface WhereCondition {
+  id: string;
+  condition: string;
 }
 
 interface MetadataState {
@@ -37,21 +41,19 @@ const VisualQueryBuilder: React.FC = () => {
   const [tablesMetadata, setTablesMetadata] = useState<Map<string, MetadataState>>(new Map());
   const [selectedTables, setSelectedTables] = useState<TableSelection[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<ColumnSelection[]>([]);
-  const [whereConditions, setWhereConditions] = useState<string[]>([]);
-  const [groupBy, setGroupBy] = useState<string[]>([]);
-  const [orderBy, setOrderBy] = useState<{column: string, direction: 'ASC' | 'DESC'}[]>([]);
+  const [whereConditions, setWhereConditions] = useState<WhereCondition[]>([]);
+  const [groupByColumns, setGroupByColumns] = useState<string[]>([]);
   const [limit, setLimit] = useState<number>(100);
   const [results, setResults] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newWhereCondition, setNewWhereCondition] = useState('');
 
-  // Load metadata for all connections
   useEffect(() => {
     const loadAllMetadata = async () => {
       const metadataMap = new Map<string, MetadataState>();
 
       for (const connection of connections) {
-        // Initialize state for this connection
         metadataMap.set(connection.id, {
           data: [],
           error: null,
@@ -62,7 +64,7 @@ const VisualQueryBuilder: React.FC = () => {
         try {
           const metadata = await fetchMetadata(parseInt(connection.id));
           metadataMap.set(connection.id, {
-            data: metadata || [], // Ensure we always have an array
+            data: metadata || [],
             error: null,
             loading: false
           });
@@ -87,7 +89,17 @@ const VisualQueryBuilder: React.FC = () => {
     const connection = connections.find(c => c.id === connectionId);
     if (!connection) return;
 
-    const alias = `${tableName}_${selectedTables.length + 1}`;
+    const existingAliases = selectedTables.map(t => t.alias);
+    let alias = tableName;
+
+    if (existingAliases.includes(alias)) {
+      let counter = 1;
+      while (existingAliases.includes(`${tableName}_${counter}`)) {
+        counter++;
+      }
+      alias = `${tableName}_${counter}`;
+    }
+
     setSelectedTables([...selectedTables, {
       connectionId,
       name: tableName,
@@ -117,6 +129,30 @@ const VisualQueryBuilder: React.FC = () => {
     setSelectedColumns(selectedColumns.filter((_, i) => i !== index));
   };
 
+  const handleAddWhereCondition = () => {
+    if (!newWhereCondition.trim()) return;
+
+    setWhereConditions([
+      ...whereConditions,
+      { id: Date.now().toString(), condition: newWhereCondition.trim() }
+    ]);
+    setNewWhereCondition('');
+  };
+
+  const handleRemoveWhereCondition = (id: string) => {
+    setWhereConditions(whereConditions.filter(condition => condition.id !== id));
+  };
+
+  const handleAddGroupBy = (column: string) => {
+    if (!groupByColumns.includes(column)) {
+      setGroupByColumns([...groupByColumns, column]);
+    }
+  };
+
+  const handleRemoveGroupBy = (column: string) => {
+    setGroupByColumns(groupByColumns.filter(col => col !== column));
+  };
+
   const handleExecuteQuery = async () => {
     if (selectedTables.length === 0) {
       setError('Please select at least one table');
@@ -127,50 +163,62 @@ const VisualQueryBuilder: React.FC = () => {
     setError(null);
 
     try {
-      // Build the federated query
       let query = 'SELECT ';
 
+      // Handle columns with new format
       if (selectedColumns.length === 0) {
         query += '* ';
       } else {
         query += selectedColumns.map(col => {
+          const connection = connections.find(c => c.id === col.connectionId);
           let columnStr = '';
           if (col.aggregate) {
-            columnStr += `${col.aggregate}(${col.table}.${col.column})`;
+            columnStr += `${col.aggregate}(${connection?.name}.${col.table}.${col.column})`;
           } else {
-            columnStr += `${col.table}.${col.column}`;
-          }
-          if (col.alias) {
-            columnStr += ` AS ${col.alias}`;
+            columnStr += `${connection?.name}.${col.table}.${col.column}`;
           }
           return columnStr;
         }).join(', ');
       }
 
-      // Add connection-specific table references
+      // Handle FROM clause with JOINs
       query += '\nFROM ' + selectedTables.map((table, index) => {
         const connection = connections.find(c => c.id === table.connectionId);
         if (index === 0) {
-          return `${connection?.name}.${table.name} ${table.alias}`;
+          return `${connection?.name}.${table.name}`;
         }
-        return `${table.joinType || 'INNER JOIN'} ${connection?.name}.${table.name} ${table.alias} ON ${table.joinCondition}`;
+        return `INNER JOIN ${connection?.name}.${table.name}${
+            table.joinCondition ? ` ON ${table.joinCondition}` : ''
+        }`;
       }).join('\n');
 
+      // Handle WHERE conditions
       if (whereConditions.length > 0) {
-        query += '\nWHERE ' + whereConditions.join(' AND ');
+        const conditions = whereConditions.map(wc => wc.condition).filter(Boolean);
+        if (conditions.length > 0) {
+          query += '\nWHERE ' + conditions.join('\n  AND ');
+        }
       }
 
-      if (groupBy.length > 0) {
-        query += '\nGROUP BY ' + groupBy.join(', ');
+      // Handle GROUP BY with new format
+      if (groupByColumns.length > 0) {
+        query += '\nGROUP BY ' + groupByColumns.map(column => {
+          const [table, col] = column.split('.');
+          const tableSelection = selectedTables.find(t => t.alias === table);
+          if (tableSelection) {
+            const connection = connections.find(c => c.id === tableSelection.connectionId);
+            return `${connection?.name}.${table}.${col}`;
+          }
+          return column;
+        }).join(', ');
       }
 
-      if (orderBy.length > 0) {
-        query += '\nORDER BY ' + orderBy.map(o => `${o.column} ${o.direction}`).join(', ');
-      }
-
-      if (limit) {
+      // Handle LIMIT
+      if (limit > 0) {
         query += `\nLIMIT ${limit}`;
       }
+
+      console.log('Executing query:', query);
 
       const data = await executeSqlQuery('federated', query);
       setResults(data);
@@ -257,16 +305,16 @@ const VisualQueryBuilder: React.FC = () => {
                         }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Database size={16} className="mr-2" />
-                          <span className="font-medium">{connection?.name}</span>
-                          <ArrowRight size={12} className="mx-1" />
-                          <span className="font-medium">{table.name}</span>
-                          <span className="ml-2 text-sm text-gray-500">as {table.alias}</span>
+                        <div className="flex items-center overflow-hidden">
+                          <Database size={16} className="mr-2 flex-shrink-0" />
+                          <span className="font-medium truncate">{connection?.name}</span>
+                          <ArrowRight size={12} className="mx-1 flex-shrink-0" />
+                          <span className="font-medium truncate">{table.name}</span>
+                          <span className="ml-2 text-sm text-gray-500 truncate">as {table.alias}</span>
                         </div>
                         <button
                             onClick={() => handleRemoveTable(index)}
-                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full flex-shrink-0"
                         >
                           <X size={16} />
                         </button>
@@ -284,9 +332,6 @@ const VisualQueryBuilder: React.FC = () => {
                                 onChange={(e) => handleAddJoin(index, e.target.value as TableSelection['joinType'])}
                             >
                               <option value="INNER JOIN">INNER JOIN</option>
-                              <option value="LEFT JOIN">LEFT JOIN</option>
-                              <option value="RIGHT JOIN">RIGHT JOIN</option>
-                              <option value="FULL JOIN">FULL JOIN</option>
                             </select>
                             <input
                                 type="text"
@@ -370,15 +415,6 @@ const VisualQueryBuilder: React.FC = () => {
                           );
                         })}
                       </select>
-                      <button
-                          className={`p-2 rounded-md border ${
-                              darkMode
-                                  ? 'border-gray-600 hover:bg-gray-700'
-                                  : 'border-gray-300 hover:bg-gray-100'
-                          }`}
-                      >
-                        <Plus size={20} />
-                      </button>
                     </div>
                   </div>
 
@@ -395,19 +431,19 @@ const VisualQueryBuilder: React.FC = () => {
                                       : 'bg-gray-50 border-gray-200'
                               }`}
                           >
-                            <div className="flex items-center">
-                              <span className="font-medium">{connection?.name}</span>
-                              <ArrowRight size={12} className="mx-1" />
-                              <span className="font-medium">{col.table}</span>
-                              <ArrowRight size={12} className="mx-1" />
-                              <span>{col.column}</span>
+                            <div className="flex items-center overflow-hidden">
+                              <span className="font-medium truncate">{connection?.name}</span>
+                              <ArrowRight size={12} className="mx-1 flex-shrink-0" />
+                              <span className="font-medium truncate">{col.table}</span>
+                              <ArrowRight size={12} className="mx-1 flex-shrink-0" />
+                              <span className="truncate">{col.column}</span>
                               {col.aggregate && (
                                   <span className="ml-2 text-sm text-gray-500">({col.aggregate})</span>
                               )}
                             </div>
                             <button
                                 onClick={() => handleRemoveColumn(index)}
-                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
+                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full flex-shrink-0"
                             >
                               <X size={16} />
                             </button>
@@ -429,25 +465,61 @@ const VisualQueryBuilder: React.FC = () => {
 
             {selectedTables.length > 0 ? (
                 <div className="space-y-4">
+                  {/* Where Conditions */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Where Conditions</label>
-                    <input
-                        type="text"
-                        placeholder="Add condition..."
-                        className={`w-full p-2 rounded-md border ${
-                            darkMode
-                                ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
-                                : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                        }`}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && e.currentTarget.value) {
-                            setWhereConditions([...whereConditions, e.currentTarget.value]);
-                            e.currentTarget.value = '';
-                          }
-                        }}
-                    />
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={newWhereCondition}
+                            onChange={(e) => setNewWhereCondition(e.target.value)}
+                            placeholder="Enter condition..."
+                            className={`flex-1 p-2 rounded-md border ${
+                                darkMode
+                                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                            }`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleAddWhereCondition();
+                              }
+                            }}
+                        />
+                        <button
+                            onClick={handleAddWhereCondition}
+                            className={`p-2 rounded-md border ${
+                                darkMode
+                                    ? 'border-gray-600 hover:bg-gray-700'
+                                    : 'border-gray-300 hover:bg-gray-100'
+                            }`}
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
+
+                      {whereConditions.map((condition) => (
+                          <div
+                              key={condition.id}
+                              className={`flex items-center justify-between p-2 rounded-md border ${
+                                  darkMode
+                                      ? 'bg-gray-700 border-gray-600'
+                                      : 'bg-gray-50 border-gray-200'
+                              }`}
+                          >
+                            <span className="truncate">{condition.condition}</span>
+                            <button
+                                onClick={() => handleRemoveWhereCondition(condition.id)}
+                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full ml-2"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Group By */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Group By</label>
                     <select
@@ -458,64 +530,54 @@ const VisualQueryBuilder: React.FC = () => {
                         }`}
                         onChange={(e) => {
                           if (e.target.value) {
-                            setGroupBy([...groupBy, e.target.value]);
+                            handleAddGroupBy(e.target.value);
                             e.target.value = '';
                           }
                         }}
                         value=""
                     >
-                      <option value="" disabled>Add group by...</option>
+                      <option value="" disabled>Add group by column...</option>
                       {selectedColumns.map((col, index) => (
-                          <option key={index} value={`${col.table}.${col.column}`}>
+                          <option
+                              key={index}
+                              value={`${col.table}.${col.column}`}
+                              disabled={groupByColumns.includes(`${col.table}.${col.column}`)}
+                          >
                             {col.table}.{col.column}
                           </option>
                       ))}
                     </select>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Order By</label>
-                    <div className="flex gap-2">
-                      <select
-                          className={`flex-1 p-2 rounded-md border ${
-                              darkMode
-                                  ? 'bg-gray-700 border-gray-600 text-white'
-                                  : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              setOrderBy([...orderBy, { column: e.target.value, direction: 'ASC' }]);
-                              e.target.value = '';
-                            }
-                          }}
-                          value=""
-                      >
-                        <option value="" disabled>Add order by...</option>
-                        {selectedColumns.map((col, index) => (
-                            <option key={index} value={`${col.table}.${col.column}`}>
-                              {col.table}.{col.column}
-                            </option>
-                        ))}
-                      </select>
-                      <select
-                          className={`w-24 p-2 rounded-md border ${
-                              darkMode
-                                  ? 'bg-gray-700 border-gray-600 text-white'
-                                  : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                      >
-                        <option value="ASC">ASC</option>
-                        <option value="DESC">DESC</option>
-                      </select>
+                    <div className="mt-2 space-y-2">
+                      {groupByColumns.map((column, index) => (
+                          <div
+                              key={index}
+                              className={`flex items-center justify-between p-2 rounded-md border ${
+                                  darkMode
+                                      ? 'bg-gray-700 border-gray-600'
+                                      : 'bg-gray-50 border-gray-200'
+                              }`}
+                          >
+                            <span className="truncate">{column}</span>
+                            <button
+                                onClick={() => handleRemoveGroupBy(column)}
+                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full ml-2"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                      ))}
                     </div>
                   </div>
 
+                  {/* Limit */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Limit</label>
                     <input
                         type="number"
                         value={limit}
                         onChange={(e) => setLimit(parseInt(e.target.value) || 0)}
+                        min="0"
                         className={`w-full p-2 rounded-md border ${
                             darkMode
                                 ? 'bg-gray-700 border-gray-600 text-white'
