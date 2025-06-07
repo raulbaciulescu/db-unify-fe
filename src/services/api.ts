@@ -2,8 +2,8 @@ import axios from 'axios';
 import { DatabaseConnection, TableSchema, ScheduledJob, JobResult } from '../types/connection';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
-  // baseURL: 'http://132.220.25.180',
+   baseURL: 'http://localhost:8080',
+  //  baseURL: 'http://132.220.25.180',
   headers: {
     'Content-Type': 'application/json',
   },

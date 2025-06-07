@@ -245,9 +245,9 @@ const VisualQueryBuilder: React.FC = () => {
       }
 
       // Add LIMIT clause
-      if (limit > 0) {
-        query += `\nLIMIT ${limit}`;
-      }
+      // if (limit > 0) {
+      //   query += `\nLIMIT ${limit}`;
+      // }
 
       console.log('Executing query:', query);
 
@@ -362,10 +362,10 @@ const VisualQueryBuilder: React.FC = () => {
                                 value={table.joinType || 'INNER JOIN'}
                                 onChange={(e) => handleAddJoin(index, e.target.value as TableSelection['joinType'])}
                             >
-                              <option value="INNER JOIN">INNER JOIN</option>
-                              <option value="LEFT JOIN">LEFT JOIN</option>
-                              <option value="RIGHT JOIN">RIGHT JOIN</option>
-                              <option value="FULL JOIN">FULL JOIN</option>
+                              {/*<option value="INNER JOIN">INNER JOIN</option>*/}
+                              {/*<option value="LEFT JOIN">LEFT JOIN</option>*/}
+                              {/*<option value="RIGHT JOIN">RIGHT JOIN</option>*/}
+                              {/*<option value="FULL JOIN">FULL JOIN</option>*/}
                             </select>
                             <input
                                 type="text"
@@ -611,21 +611,21 @@ const VisualQueryBuilder: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Limit */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Limit</label>
-                    <input
-                        type="number"
-                        value={limit}
-                        onChange={(e) => setLimit(parseInt(e.target.value) || 0)}
-                        min="0"
-                        className={`w-full p-2 rounded-md border ${
-                            darkMode
-                                ? 'bg-gray-700 border-gray-600 text-white'
-                                : 'bg-white border-gray-300 text-gray-900'
-                        }`}
-                    />
-                  </div>
+                  {/*/!* Limit *!/*/}
+                  {/*<div>*/}
+                  {/*  <label className="block text-sm font-medium mb-2">Limit</label>*/}
+                  {/*  <input*/}
+                  {/*      type="number"*/}
+                  {/*      value={limit}*/}
+                  {/*      onChange={(e) => setLimit(parseInt(e.target.value) || 0)}*/}
+                  {/*      min="0"*/}
+                  {/*      className={`w-full p-2 rounded-md border ${*/}
+                  {/*          darkMode*/}
+                  {/*              ? 'bg-gray-700 border-gray-600 text-white'*/}
+                  {/*              : 'bg-white border-gray-300 text-gray-900'*/}
+                  {/*      }`}*/}
+                  {/*  />*/}
+                  {/*</div>*/}
 
                   <button
                       onClick={handleExecuteQuery}
