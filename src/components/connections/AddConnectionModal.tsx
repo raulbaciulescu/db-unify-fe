@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Shield } from 'lucide-react';
 import { useConnections } from '../../context/ConnectionContext';
 import { ConnectionType, ConnectionStatus } from '../../types/connection';
 import { useTheme } from '../../context/ThemeContext';
 import { createConnection } from '../../services/api';
+import { encryptPassword } from '../../utils/encryption';
 
 interface AddConnectionModalProps {
   onClose: () => void;
@@ -64,10 +65,14 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ onClose }) => {
     setError(null);
 
     try {
-      // Create connection through API
+      // Criptează parola înainte de trimitere
+      const encryptedPassword = encryptPassword(formData.password);
+
+      // Create connection through API cu parola criptată
       const response = await createConnection({
         ...formData,
         port: parseInt(formData.port),
+        password: encryptedPassword, // Trimite parola criptată
       });
 
       // Add to local state
@@ -184,25 +189,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ onClose }) => {
                 </div>
               </div>
 
-              {/*<div>*/}
-              {/*  <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>*/}
-              {/*    Database Name*/}
-              {/*  </label>*/}
-              {/*  <input*/}
-              {/*      type="text"*/}
-              {/*      name="database"*/}
-              {/*      value={formData.database}*/}
-              {/*      onChange={handleChange}*/}
-              {/*      required*/}
-              {/*      className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none*/}
-              {/*    ${darkMode*/}
-              {/*          ? 'bg-gray-700 border-gray-600 text-white'*/}
-              {/*          : 'bg-white border-gray-300 text-gray-900'*/}
-              {/*      }`}*/}
-              {/*      placeholder="postgres"*/}
-              {/*  />*/}
-              {/*</div>*/}
-
               <div>
                 <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   Username
@@ -239,6 +225,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ onClose }) => {
                     }`}
                     placeholder="••••••••"
                 />
+                <div className={`flex items-center mt-1 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Shield size={12} className="mr-1" />
+                  <span>Password will be encrypted before sending</span>
+                </div>
               </div>
             </div>
 
